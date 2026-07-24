@@ -22,6 +22,7 @@ from .utils import (
     fetch_data,
     get_data,
     get_location_info_by_id,
+    _get_warning_metadata,
 )
 from .weather import Weather
 
@@ -351,6 +352,74 @@ class WeatherIL:
 
         if self._full_warnings_data:
             self._warnings_last_fetch = datetime.now()
+
+    def get_sea_warnings(self):
+        """
+        Get active warnings for the sea regions (is_sea = 1).
+
+        get_warnings() only returns alerts filed against the region of the
+        configured location, which is a land region for any coastal city, so
+        marine alerts never show up there. This reuses the already fetched
+        (and cached) national warnings payload, so it costs no extra request.
+        Alerts covering several sea regions are returned once, keyed by wid.
+
+        return: list of Warning objects
+        """
+        logger.debug("Getting sea warnings")
+        self._get_warnings_data()
+
+        # The /regions endpoint carries no is_sea flag; that lives in the
+        # warnings metadata, which is cached after the first call.
+        try:
+            metadata = _get_warning_metadata(self.language) or {}
+        except Exception as e:  # noqa: BLE001 - metadata is optional here
+            logger.error("Could not read warning metadata for sea regions: " + str(e))
+            return []
+
+        sea_rids = [
+            rid
+            for rid, region in (metadata.get("regions") or {}).items()
+            if str(region.get("is_sea")) == "1"
+        ]
+        logger.debug(f"Sea regions: {sea_rids}")
+        return self._collect_warnings(sea_rids)
+
+    def _collect_warnings(self, region_ids):
+        """
+        Build Warning objects for the given region ids, de-duplicated by wid.
+        """
+        warnings = {}
+        if not self._full_warnings_data:
+            return []
+
+        for key in self._full_warnings_data[FULL_WARNINGS_DATA_KEY]:
+            daily_warnings: dict = get_value(
+                self._full_warnings_data, FULL_WARNINGS_DATA_KEY, key, dict
+            )
+            for region_id in region_ids:
+                for alert in daily_warnings.get(region_id, {}).values():
+                    wid = int(alert["wid"])
+                    if wid in warnings:
+                        continue
+                    warnings[wid] = Warning(
+                        language=self.language,
+                        location_id=int(self.location),
+                        wid=wid,
+                        alert_id=int(alert["alert_id"]),
+                        severity_id=int(alert["severity_id"]),
+                        warning_type_id=int(alert["warning_type_id"]),
+                        sent=alert["sent"],
+                        valid_from=alert["valid_from"],
+                        valid_to=alert["valid_to"],
+                        full_en=alert["full_en"],
+                        full_he=alert["full_he"],
+                        text=alert["text"],
+                        text_full=alert["text_full"],
+                        valid_from_unix=int(alert["valid_from_unix"]),
+                        groups=alert["groups"],
+                        regions=alert["regions"],
+                    )
+        return list(warnings.values())
 
     def get_warnings(self):
         """
