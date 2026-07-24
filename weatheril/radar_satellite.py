@@ -17,15 +17,24 @@ class RadarSatellite:
 
     def __init__(
         self,
-        imsradar_images: list = [],
-        radar_images: list = [],
-        middle_east_satellite_images: list = [],
-        europe_satellite_images: list = [],
+        imsradar_images: list | None = None,
+        radar_images: list | None = None,
+        middle_east_satellite_images: list | None = None,
+        europe_satellite_images: list | None = None,
     ):
-        self.imsradar_images = imsradar_images
-        self.radar_images = radar_images
-        self.middle_east_satellite_images = middle_east_satellite_images
-        self.europe_satellite_images = europe_satellite_images
+        # Mutable default arguments would be shared by every instance, so each
+        # get_radar_images() call appended to the same lists and they grew
+        # without bound for the lifetime of the process.
+        self.imsradar_images = imsradar_images if imsradar_images is not None else []
+        self.radar_images = radar_images if radar_images is not None else []
+        self.middle_east_satellite_images = (
+            middle_east_satellite_images
+            if middle_east_satellite_images is not None
+            else []
+        )
+        self.europe_satellite_images = (
+            europe_satellite_images if europe_satellite_images is not None else []
+        )
 
     def generate_images(self, path: str = ""):
         self.create_animation("imsradar.gif", self.imsradar_images, path)
