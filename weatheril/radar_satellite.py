@@ -1,96 +1,20 @@
 from __future__ import annotations
-import os
-import tempfile
-import requests
-from PIL import Image
-from loguru import logger
-from urllib.parse import urlparse
-from dataclasses import dataclass
+
+from dataclasses import dataclass, field
 
 
 @dataclass
 class RadarSatellite:
-    imsradar_images: list
-    radar_images: list
-    middle_east_satellite_images: list
-    europe_satellite_images: list
+    """
+    Image URLs published by the IMS radar/satellite endpoint.
 
-    def __init__(
-        self,
-        imsradar_images: list | None = None,
-        radar_images: list | None = None,
-        middle_east_satellite_images: list | None = None,
-        europe_satellite_images: list | None = None,
-    ):
-        # Mutable default arguments would be shared by every instance, so each
-        # get_radar_images() call appended to the same lists and they grew
-        # without bound for the lifetime of the process.
-        self.imsradar_images = imsradar_images if imsradar_images is not None else []
-        self.radar_images = radar_images if radar_images is not None else []
-        self.middle_east_satellite_images = (
-            middle_east_satellite_images
-            if middle_east_satellite_images is not None
-            else []
-        )
-        self.europe_satellite_images = (
-            europe_satellite_images if europe_satellite_images is not None else []
-        )
+    Only the lists IMS actually fills are kept. ``radar`` comes back empty and
+    there is no ``EUROPE`` key in the response, so those two were dropped.
 
-    def generate_images(self, path: str = ""):
-        self.create_animation("imsradar.gif", self.imsradar_images, path)
-        self.create_animation("radar.gif", self.radar_images, path)
-        self.create_animation(
-            "middle_east.gif", self.middle_east_satellite_images, path
-        )
-        self.create_animation("europe.gif", self.europe_satellite_images, path)
+    Note that the IMS radar frames themselves are currently unusable: the
+    per-frame PNG URLs answer 200 with a 2-byte placeholder body instead of an
+    image. The satellite JPEGs are fine.
+    """
 
-    def create_animation(self, animated_file: str, images: list, path: str):
-        """
-        This method will download the images needed to create animated Radar / Satellite image
-        parameters:
-            >>> path: path to save the animated image. if path wil not be provided, the default path will be the current one.
-            >>> animated_file: The name of the animated file
-            >>> images: the list of images for creating the animation.
-        """
-        try:
-            if os.path.exists(path):
-                animated_image_path = path + "/" + animated_file
-            else:
-                animated_image_path = (
-                    os.path.realpath(os.path.dirname(__file__)) + "/" + animated_file
-                )
-            logger.debug(
-                "Creating " + animated_file + " animation at: " + animated_image_path
-            )
-
-            for idx, item in enumerate(images):
-                file = requests.get(images[idx], timeout=30)
-                open(
-                    tempfile.gettempdir()
-                    + "/"
-                    + os.path.basename(urlparse(images[idx]).path),
-                    "wb",
-                ).write(file.content)
-                images[idx] = (
-                    tempfile.gettempdir()
-                    + "/"
-                    + os.path.basename(urlparse(images[idx]).path)
-                )
-
-            frames = [Image.open(image) for image in images]
-            frame_one = frames[0]
-            frame_one.save(
-                animated_image_path,
-                format="GIF",
-                append_images=frames,
-                save_all=True,
-                duration=4,
-                loop=0,
-            )
-
-            for image in images:
-                os.remove(image)
-            return animated_image_path
-        except Exception as e:
-            logger.error("Error creating " + animated_file + " animation. " + str(e))
-            return None
+    imsradar_images: list = field(default_factory=list)
+    middle_east_satellite_images: list = field(default_factory=list)

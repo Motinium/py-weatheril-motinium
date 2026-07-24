@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-import requests
 from loguru import logger
 
 from .consts import (
@@ -20,16 +19,10 @@ from .utils import (
     get_region_by_id,
     get_value,
     fetch_data,
-    get_data,
     get_location_info_by_id,
     _get_warning_metadata,
 )
 from .weather import Weather
-
-
-# ims.gov.il does not support ipv6 yet, `requests` use ipv6 by default
-# and wait for timeout before trying ipv4, so we have to disable ipv6
-requests.packages.urllib3.util.connection.HAS_IPV6 = False
 
 DAILY_KEY = "daily"
 HOURLY_KEY = "hourly"
@@ -41,7 +34,7 @@ DEFAULT_CACHE_EXPIRATION = 30
 
 class WeatherIL:
     def __init__(
-        self, location, language="he", cache_expiration_in_sec=DEFAULT_CACHE_EXPIRATION
+        self, location, language="en", cache_expiration_in_sec=DEFAULT_CACHE_EXPIRATION
     ):
         """
         Init the WeatherIL object.
@@ -132,8 +125,7 @@ class WeatherIL:
                 logger.debug("Response: " + analysis_data)
                 return None
         except Exception as e:
-            logger.error("Error getting current analysis.")
-            logger.exception(e)
+            logger.exception("Error getting current analysis. " + str(e))
             return None
 
     def get_forecast(self):
@@ -186,8 +178,7 @@ class WeatherIL:
             return Forecast(days)
 
         except Exception as e:
-            logger.error("Error getting forecast data")
-            logger.exception(e)
+            logger.exception("Error getting forecast data. " + str(e))
             return None
 
     def _get_hourly_forecast(self, data):
@@ -243,9 +234,10 @@ class WeatherIL:
                 )
             return hours
         except Exception as e:
-            logger.error("Error getting hourly forecast ")
-            logger.exception(e)
-            return None
+            # An empty list, not None: Daily.hours is typed as a list and
+            # callers iterate it without a None check.
+            logger.error("Error getting hourly forecast. " + str(e))
+            return []
 
     def _get_images_list(self, data, *keys):
         current = data
@@ -274,15 +266,11 @@ class WeatherIL:
             data = fetch_data(url)
             base_url = IMS_API_URL_BASE.format(language="").rstrip("/")
 
-            print("Getting IMS Radar")
             ims_radar_list = self._get_images_list(data, "data", "types", "IMSRadar")
             self._append_images(rs, ims_radar_list, "imsradar_images", base_url)
 
-            print("Getting Radar")
-            radar_list = self._get_images_list(data, "data", "types", "radar")
-            self._append_images(rs, radar_list, "radar_images", base_url)
-
-            print("Getting Middle East")
+            # Only the NATURAL satellite set is collected; IMS also publishes
+            # DUST, IR and FOG under the same key if they are ever wanted.
             middle_east_list = self._get_images_list(
                 data, "data", "types", "satellite", "NATURAL"
             )
@@ -290,36 +278,39 @@ class WeatherIL:
                 rs, middle_east_list, "middle_east_satellite_images", base_url
             )
 
-            print("Getting Europe")
-            europe_list = self._get_images_list(data, "data", "types", "EUROPE")
-            self._append_images(rs, europe_list, "europe_satellite_images", base_url)
-
             logger.debug(
-                f"\
-                Got: {len(rs.imsradar_images)} IMS Radar Images;\
-                {len(rs.radar_images)} Radar Images;\
-                {len(rs.middle_east_satellite_images)} Middle East Satellite Images;\
-                {len(rs.europe_satellite_images)} European Satellite Images"
+                f"Got: {len(rs.imsradar_images)} IMS radar images; "
+                f"{len(rs.middle_east_satellite_images)} Middle East satellite images"
             )
             return rs
         except Exception as e:
             logger.error("Error getting images. " + str(e))
             return rs
 
+    def _is_cache_fresh(self, last_fetch):
+        """
+        Whether data fetched at ``last_fetch`` is still within the cache window.
+        """
+        if last_fetch is None:
+            return False
+        age = (datetime.now() - last_fetch).total_seconds()
+        return age < self._cache_expiration_in_sec
+
     def _get_analysis_data(self):
         """
         Get the city current analysis data
         return: dict
         """
+        # The timestamp is only moved when data was actually fetched. Touching
+        # it on a cache hit would slide the window forward on every call, so a
+        # caller polling faster than the expiry would never see fresh data.
+        if self._analysis_data and self._is_cache_fresh(self._analysis_last_fetch):
+            return
+
         url = CURRENT_ANALYSIS_URL.format(
             language=self.language, location=self.location
         )
-        self._analysis_data = get_data(
-            self._analysis_data,
-            url,
-            self._analysis_last_fetch,
-            self._cache_expiration_in_sec,
-        )
+        self._analysis_data = fetch_data(url).get("data", {})
         if self._analysis_data:
             self._analysis_last_fetch = datetime.now()
 
@@ -327,13 +318,11 @@ class WeatherIL:
         """
         Get the city forecast data
         """
+        if self._forecast_data and self._is_cache_fresh(self._forecast_last_fetch):
+            return
+
         url = FORECAST_URL.format(language=self.language, location=self.location)
-        self._forecast_data = get_data(
-            self._forecast_data,
-            url,
-            self._forecast_last_fetch,
-            self._cache_expiration_in_sec,
-        )
+        self._forecast_data = fetch_data(url).get("data", {})
         if self._forecast_data:
             self._forecast_last_fetch = datetime.now()
 
@@ -341,15 +330,13 @@ class WeatherIL:
         """
         Get the all warning data
         """
+        if self._full_warnings_data and self._is_cache_fresh(
+            self._warnings_last_fetch
+        ):
+            return
 
         url = WARNINGS_URL.format(language=self.language)
-        self._full_warnings_data = get_data(
-            self._full_warnings_data,
-            url,
-            self._warnings_last_fetch,
-            self._cache_expiration_in_sec,
-        )
-
+        self._full_warnings_data = fetch_data(url).get("data", {})
         if self._full_warnings_data:
             self._warnings_last_fetch = datetime.now()
 
@@ -382,7 +369,21 @@ class WeatherIL:
             if str(region.get("is_sea")) == "1"
         ]
         logger.debug(f"Sea regions: {sea_rids}")
-        return self._collect_warnings(sea_rids)
+        return self.get_warnings_for_regions(sea_rids)
+
+    def get_warnings_for_regions(self, region_ids):
+        """
+        Get active warnings filed against the given regions.
+
+        ``region_ids`` are ids as IMS writes them, e.g. ["r-54", "r-97"]; see
+        the ``regions`` map in the warnings metadata. Warnings covering several
+        of the requested regions are returned once, keyed by wid. Reuses the
+        cached national warnings payload, so it costs no extra request.
+
+        return: list of Warning objects
+        """
+        self._get_warnings_data()
+        return self._collect_warnings(region_ids)
 
     def _collect_warnings(self, region_ids):
         """
