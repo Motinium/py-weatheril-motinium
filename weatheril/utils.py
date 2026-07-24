@@ -338,7 +338,7 @@ def fetch_data(url: str) -> dict:
     """
     try:
         logger.debug("Getting data from: " + url)
-        response = requests.get(url)
+        response = requests.get(url, timeout=15)
         response = json.loads(response.text)
         return response
     except Exception as e:

@@ -194,6 +194,9 @@ class WeatherIL:
         Get the hourly forecast
         """
         hours = []
+        if not data:
+            logger.debug("No hourly forecast data for this day")
+            return hours
         try:
             for key in data.keys():
                 hours.append(

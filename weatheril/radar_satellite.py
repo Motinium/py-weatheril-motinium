@@ -55,7 +55,7 @@ class RadarSatellite:
             )
 
             for idx, item in enumerate(images):
-                file = requests.get(images[idx])
+                file = requests.get(images[idx], timeout=30)
                 open(
                     tempfile.gettempdir()
                     + "/"
