@@ -1,10 +1,11 @@
 import json
+import logging
 import threading
 from datetime import datetime
 from typing import Type, Optional
 
 import requests
-from loguru import logger
+
 from weatheril.consts import (
     EN_LOCATIONS,
     EN_WEATHER_CODES,
@@ -15,6 +16,8 @@ from weatheril.consts import (
     WIND_DIRECTIONS_URL,
 )
 from weatheril.consts import REGIONS_URL
+
+logger = logging.getLogger(__name__)
 
 # One session for every request: IMS is a single host, so reusing the
 # connection avoids a TCP and TLS handshake per call.

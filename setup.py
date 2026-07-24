@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="UTF-8") as f:
 
 setup_args = dict(
     name="weatheril-motinium",
-    version="0.41.0+fork.5",
+    version="0.41.0+fork.6",
     description="Israel Meteorological Service unofficial python api wrapper",
     long_description_content_type="text/markdown",
     long_description=readme,
@@ -28,7 +28,7 @@ setup_args = dict(
         "Source": "https://github.com/t0mer/py-weatheril",
     },
     python_requires=">=3.6",
-    install_requires=["requests", "pytz", "loguru"],
+    install_requires=["requests", "pytz"],
     classifiers=[
         "Intended Audience :: Developers",
         "Topic :: Software Development :: Build Tools",

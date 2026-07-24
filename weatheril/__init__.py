@@ -1,8 +1,7 @@
 """Israel Meteorological Service unofficial python api wrapper"""
 
+import logging
 from datetime import datetime
-
-from loguru import logger
 
 from .consts import (
     CURRENT_ANALYSIS_URL,
@@ -23,6 +22,8 @@ from .utils import (
     _get_warning_metadata,
 )
 from .weather import Weather
+
+logger = logging.getLogger(__name__)
 
 DAILY_KEY = "daily"
 HOURLY_KEY = "hourly"
