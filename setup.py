@@ -5,8 +5,8 @@ with open("README.md", "r", encoding="UTF-8") as f:
     readme = f.read()
 
 setup_args = dict(
-    name="weatheril",
-    version="0.41.0+fork.1",
+    name="weatheril-motinium",
+    version="0.41.0+fork.2",
     description="Israel Meteorological Service unofficial python api wrapper",
     long_description_content_type="text/markdown",
     long_description=readme,
